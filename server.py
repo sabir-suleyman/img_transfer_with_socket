@@ -1,11 +1,23 @@
+import argparse
 import os
 import socket
 import struct
+import sys
 from datetime import datetime
 
-SERVER_HOST = '0.0.0.0'
-SERVER_PORT = 5001
+DEFAULT_HOST = '0.0.0.0'
+DEFAULT_PORT = 5001
 BUFFER_SIZE = 4096
+
+parser = argparse.ArgumentParser(description="Resim alan TCP sunucusu.")
+parser.add_argument("--host", default=DEFAULT_HOST,
+                    help=f"Dinlenecek adres (varsayılan: {DEFAULT_HOST}, tüm arayüzler)")
+parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT,
+                    help=f"Dinlenecek port (varsayılan: {DEFAULT_PORT})")
+args = parser.parse_args()
+
+SERVER_HOST = args.host
+SERVER_PORT = args.port
 
 
 def recv_exact(sock, n):
@@ -25,10 +37,17 @@ def recv_exact(sock, n):
 
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# Sunucu hızlıca yeniden başlatıldığında portun meşgul kalmasını engeller
-server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+# Sunucu hızlıca yeniden başlatıldığında portun meşgul kalmasını engeller.
+# Windows'ta SO_REUSEADDR farklı çalışır (aynı portu iki programın açmasına
+# izin verir), bu yüzden sadece Linux/macOS'ta ayarlıyoruz.
+if os.name != "nt":
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-server_socket.bind((SERVER_HOST, SERVER_PORT))
+try:
+    server_socket.bind((SERVER_HOST, SERVER_PORT))
+except OSError as e:
+    sys.exit(f"[!] {SERVER_HOST}:{SERVER_PORT} dinlenemiyor "
+             f"(port başka bir programda açık olabilir): {e}")
 server_socket.listen(5)
 
 print(f"[*] Sunucu dinlemede: {SERVER_HOST}:{SERVER_PORT}")
