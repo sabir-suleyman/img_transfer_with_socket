@@ -1,3 +1,4 @@
+import os
 import socket
 import struct
 from datetime import datetime
@@ -5,6 +6,23 @@ from datetime import datetime
 SERVER_HOST = '0.0.0.0'
 SERVER_PORT = 5001
 BUFFER_SIZE = 4096
+
+
+def recv_exact(sock, n):
+    """Soketten TAM olarak n bayt okur.
+
+    TCP bir bayt akışıdır: recv(8) çağrısı 8 bayt yerine 3 bayt döndürebilir.
+    Bu yüzden istenen miktar tamamlanana kadar döngüyle okuruz.
+    Karşı taraf bağlantıyı erken kapatırsa ConnectionError fırlatır.
+    """
+    data = b""
+    while len(data) < n:
+        chunk = sock.recv(n - len(data))
+        if not chunk:
+            raise ConnectionError("Bağlantı, beklenen veri gelmeden kapandı.")
+        data += chunk
+    return data
+
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # Sunucu hızlıca yeniden başlatıldığında portun meşgul kalmasını engeller
@@ -23,12 +41,9 @@ try:
         print(f"[+] Yeni bağlantı sağlandı: {client_address}")
 
         try:
-            # Başlık okuma (8-byte dosya boyutu)
-            header = client_socket.recv(8)
-            if not header:
-                client_socket.close()
-                continue
-                
+            # Başlık okuma (8-byte dosya boyutu) - tam 8 bayt gelene kadar bekler
+            header = recv_exact(client_socket, 8)
+
             file_size = struct.unpack('>Q', header)[0]
             print(f"[i] Beklenen Dosya Boyutu: {file_size} bayt")
 
@@ -54,6 +69,13 @@ try:
                         
                     f.write(chunk)
                     received_bytes += len(chunk)
+
+            # Bağlantı yarıda koptuysa dosya eksiktir: bozuk dosyayı silip uyar
+            if received_bytes != file_size:
+                os.remove(output_filename)
+                print(f"[!] Aktarım yarım kaldı ({received_bytes}/{file_size} bayt). "
+                      f"Dosya silindi.\n")
+                continue
 
             print(f"[+] Kaydedildi: {output_filename}")
             print(f"[+] İlk 16 Bayt (Hex): {header_bytes.hex(' ').upper()}\n")
