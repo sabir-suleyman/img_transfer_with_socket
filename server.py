@@ -6,6 +6,7 @@ import sys
 
 DEFAULT_HOST = '0.0.0.0'
 DEFAULT_PORT = 5001
+DEFAULT_TIMEOUT = 15                     # İstemci bu kadar saniye sessiz kalırsa vazgeç
 BUFFER_SIZE = 4096
 
 SAVE_DIR = "alinan"                      # Gelen resimlerin kaydedileceği klasör
@@ -23,10 +24,14 @@ parser.add_argument("--host", default=DEFAULT_HOST,
                     help=f"Dinlenecek adres (varsayılan: {DEFAULT_HOST}, tüm arayüzler)")
 parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT,
                     help=f"Dinlenecek port (varsayılan: {DEFAULT_PORT})")
+parser.add_argument("-t", "--timeout", type=float, default=DEFAULT_TIMEOUT,
+                    help=f"İstemciden veri beklerken zaman aşımı, saniye "
+                         f"(varsayılan: {DEFAULT_TIMEOUT})")
 args = parser.parse_args()
 
 SERVER_HOST = args.host
 SERVER_PORT = args.port
+CLIENT_TIMEOUT = args.timeout
 
 
 def recv_exact(sock, n):
@@ -100,6 +105,9 @@ except OSError as e:
     sys.exit(f"[!] {SERVER_HOST}:{SERVER_PORT} dinlenemiyor "
              f"(port başka bir programda açık olabilir): {e}")
 server_socket.listen(5)
+# accept() her saniye uyanıp tekrar beklesin. Windows'ta bloklayan accept()
+# CTRL+C ile kesilemez; bu kısa zaman aşımı sunucunun kapatılabilmesini sağlar.
+server_socket.settimeout(1.0)
 
 print(f"[*] Sunucu dinlemede: {SERVER_HOST}:{SERVER_PORT}")
 print("[*] Durdurmak için terminalde CTRL+C yapabilirsiniz.\n")
@@ -107,9 +115,16 @@ print("[*] Durdurmak için terminalde CTRL+C yapabilirsiniz.\n")
 try:
     while True:
         # İstemci bağlantısını bekle
-        client_socket, client_address = server_socket.accept()
+        try:
+            client_socket, client_address = server_socket.accept()
+        except socket.timeout:
+            continue          # Bağlantı gelmedi, tekrar bekle (CTRL+C'ye fırsat ver)
         print(f"[+] Yeni bağlantı sağlandı: {client_address}")
         partial_file = None   # Yazılmakta olan dosya (hata olursa silinir)
+
+        # Bu istemciyle yapılan her recv() en fazla CLIENT_TIMEOUT saniye bekler.
+        # Böylece sessiz kalan bir istemci sunucuyu sonsuza kadar kilitleyemez.
+        client_socket.settimeout(CLIENT_TIMEOUT)
 
         try:
             # Başlık: [2 bayt ad uzunluğu][ad (UTF-8)][8 bayt dosya boyutu]
@@ -175,7 +190,11 @@ try:
             if partial_file and os.path.exists(partial_file):
                 os.remove(partial_file)
             send_status(client_socket, STATUS_FAILED)
-            print(f"[!] Aktarım hatası: {e}\n")
+            if isinstance(e, socket.timeout):
+                print(f"[!] Zaman aşımı: istemci {CLIENT_TIMEOUT:g} sn boyunca veri "
+                      f"göndermedi. Bağlantı kapatıldı.\n")
+            else:
+                print(f"[!] Aktarım hatası: {e}\n")
         finally:
             # Sadece bu istemcinin soketini kapat, sunucu açık kalsın
             client_socket.close()
