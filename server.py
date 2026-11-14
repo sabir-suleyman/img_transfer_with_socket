@@ -3,11 +3,20 @@ import os
 import socket
 import struct
 import sys
-from datetime import datetime
 
 DEFAULT_HOST = '0.0.0.0'
 DEFAULT_PORT = 5001
 BUFFER_SIZE = 4096
+
+SAVE_DIR = "alinan"                      # Gelen resimlerin kaydedileceği klasör
+MAX_FILE_SIZE = 50 * 1024 * 1024         # 50 MB üst sınır
+MAX_NAME_BYTES = 255                     # Dosya adı en fazla 255 bayt (UTF-8)
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
+
+# Sunucunun istemciye gönderdiği 1 baytlık durum kodları
+STATUS_OK = 1          # Başlık kabul edildi / resim başarıyla kaydedildi
+STATUS_REJECTED = 2    # Başlık geçersiz (ad, uzantı, boyut) - istek reddedildi
+STATUS_FAILED = 3      # Aktarım yarım kaldı ya da sunucuda hata oluştu
 
 parser = argparse.ArgumentParser(description="Resim alan TCP sunucusu.")
 parser.add_argument("--host", default=DEFAULT_HOST,
@@ -36,6 +45,48 @@ def recv_exact(sock, n):
     return data
 
 
+def send_status(sock, status):
+    """İstemciye 1 baytlık durum kodu gönderir.
+
+    Bağlantı zaten kopmuşsa göndermek hata verir; bunu sessizce geçiyoruz.
+    """
+    try:
+        sock.sendall(bytes([status]))
+    except OSError:
+        pass
+
+
+def sanitize_filename(raw_name):
+    """İstemciden gelen dosya adını güvenli hale getirir.
+
+    İstemciye güvenmiyoruz: "../../x.jpg" gibi bir ad dosyayı başka bir
+    klasöre yazdırabilir. Geçersizse ValueError fırlatır.
+    """
+    # Windows tarzı yolları (C:\\a\\b.jpg) Linux'ta da ayırabilmek için
+    name = raw_name.replace("\\", "/")
+    name = os.path.basename(name)            # "../../x.jpg" -> "x.jpg"
+    # Windows'ta yasak karakterleri ve kontrol karakterlerini "_" yap
+    name = "".join("_" if (c in '<>:"|?*' or ord(c) < 32) else c for c in name)
+    name = name.strip(" .")
+    if not name:
+        raise ValueError("Geçersiz dosya adı.")
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise ValueError(f"İzin verilmeyen dosya uzantısı: {ext or '(yok)'}")
+    return name
+
+
+def unique_path(folder, name):
+    """Aynı adlı dosya varsa üzerine yazmamak için ad_1.jpg, ad_2.jpg ... üretir."""
+    base, ext = os.path.splitext(name)
+    path = os.path.join(folder, name)
+    counter = 1
+    while os.path.exists(path):
+        path = os.path.join(folder, f"{base}_{counter}{ext}")
+        counter += 1
+    return path
+
+
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # Sunucu hızlıca yeniden başlatıldığında portun meşgul kalmasını engeller.
 # Windows'ta SO_REUSEADDR farklı çalışır (aynı portu iki programın açmasına
@@ -58,23 +109,35 @@ try:
         # İstemci bağlantısını bekle
         client_socket, client_address = server_socket.accept()
         print(f"[+] Yeni bağlantı sağlandı: {client_address}")
+        partial_file = None   # Yazılmakta olan dosya (hata olursa silinir)
 
         try:
-            # Başlık okuma (8-byte dosya boyutu) - tam 8 bayt gelene kadar bekler
-            header = recv_exact(client_socket, 8)
+            # Başlık: [2 bayt ad uzunluğu][ad (UTF-8)][8 bayt dosya boyutu]
+            name_len = struct.unpack('>H', recv_exact(client_socket, 2))[0]
+            if name_len == 0 or name_len > MAX_NAME_BYTES:
+                raise ValueError(f"Geçersiz dosya adı uzunluğu: {name_len}")
+            raw_name = recv_exact(client_socket, name_len).decode("utf-8")
+            file_name = sanitize_filename(raw_name)
 
-            file_size = struct.unpack('>Q', header)[0]
-            print(f"[i] Beklenen Dosya Boyutu: {file_size} bayt")
+            file_size = struct.unpack('>Q', recv_exact(client_socket, 8))[0]
+            if file_size == 0 or file_size > MAX_FILE_SIZE:
+                raise ValueError(f"Geçersiz dosya boyutu: {file_size} bayt "
+                                 f"(izin verilen: 1 - {MAX_FILE_SIZE})")
+            print(f"[i] Dosya adı: {file_name} | Boyut: {file_size} bayt")
 
-            # Dinamik dosya adı (tarih_saat)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_filename = f"gelen_{timestamp}.jpg"
+            # Kayıt klasörünü hazırla; aynı ad varsa üzerine yazma
+            os.makedirs(SAVE_DIR, exist_ok=True)
+            output_filename = unique_path(SAVE_DIR, file_name)
+
+            # Başlık geçerli: istemciye "veriyi gönderebilirsin" onayı ver
+            send_status(client_socket, STATUS_OK)
 
             # Veriyi alma ve kaydetme
             received_bytes = 0
             first_chunk = True
             header_bytes = b""
 
+            partial_file = output_filename
             with open(output_filename, "wb") as f:
                 while received_bytes < file_size:
                     bytes_to_read = min(BUFFER_SIZE, file_size - received_bytes)
@@ -92,15 +155,27 @@ try:
             # Bağlantı yarıda koptuysa dosya eksiktir: bozuk dosyayı silip uyar
             if received_bytes != file_size:
                 os.remove(output_filename)
+                partial_file = None
+                send_status(client_socket, STATUS_FAILED)
                 print(f"[!] Aktarım yarım kaldı ({received_bytes}/{file_size} bayt). "
                       f"Dosya silindi.\n")
                 continue
 
+            partial_file = None   # Dosya tam geldi, artık silinmemeli
+            send_status(client_socket, STATUS_OK)
             print(f"[+] Kaydedildi: {output_filename}")
             print(f"[+] İlk 16 Bayt (Hex): {header_bytes.hex(' ').upper()}\n")
 
+        except ValueError as e:
+            # Geçersiz başlık (ad, uzantı, boyut vb.) -> istek reddedilir
+            send_status(client_socket, STATUS_REJECTED)
+            print(f"[!] İstek reddedildi: {e}\n")
         except Exception as e:
-            print(f"[!] Aktarım hatası: {e}")
+            # Beklenmeyen hata (bağlantı kopması, disk hatası...): yarım dosyayı sil
+            if partial_file and os.path.exists(partial_file):
+                os.remove(partial_file)
+            send_status(client_socket, STATUS_FAILED)
+            print(f"[!] Aktarım hatası: {e}\n")
         finally:
             # Sadece bu istemcinin soketini kapat, sunucu açık kalsın
             client_socket.close()
