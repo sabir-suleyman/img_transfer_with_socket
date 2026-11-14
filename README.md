@@ -10,29 +10,55 @@ Bilgisayar Ağlarında Temel Protokoller dersi ödevi.
 İki bilgisayar arasında **TCP soketleri** kullanarak resim gönderir. İnternet gerekmez; iki bilgisayarın
 aynı yerel ağda olması yeterlidir (aynı Wi-Fi, telefon hotspot'u veya Ethernet kablosu).
 
-Linux (Kali) ve Windows 10/11 üzerinde çalışır. Sadece Python standart kütüphanesini kullanır,
-ek paket kurmak gerekmez.
+Linux (Kali) ve Windows 10/11 üzerinde çalışır. Sadece Python standart kütüphanesini kullanır
+(arayüz için `tkinter`), `pip` ile ek paket kurmak gerekmez.
 
 ## Dosyalar
 
 | Dosya         | Görevi                                                                      |
 |---------------|-----------------------------------------------------------------------------|
-| `transfer.py` | **Ana program.** Tek dosya, iki bilgisayarda da çalışır; **rol (alıcı / gönderici) program çalışırken seçilir.** |
+| `gui.py`      | **Grafik arayüz (tkinter).** Komut yazmadan gönderme ve alma; en kolay kullanım yolu. |
+| `transfer.py` | **Ana program (komut satırı).** Tek dosya, iki bilgisayarda da çalışır; **rol (alıcı / gönderici) program çalışırken seçilir.** |
 | `server.py`   | Sadece alıcı (sunucu) olarak çalışan ayrı sürüm.                            |
 | `client.py`   | Sadece gönderen (istemci) olarak çalışan ayrı sürüm.                        |
 | `protocol.py` | `server.py` ve `client.py`'nin ortak kullandığı sabitler ve yardımcılar. `transfer.py` buna ihtiyaç duymaz. |
 
-Dört dosya da **aynı protokolü** konuşur, yani birbirleriyle uyumludur: örneğin bir tarafta `transfer.py`,
+Beş dosya da **aynı ağ kodunu / protokolü** kullanır (`gui.py`, `transfer.py`'yi içe aktarır), yani birbirleriyle uyumludur: örneğin bir tarafta `transfer.py`,
 diğer tarafta `server.py` / `client.py` kullanılabilir. Alınan resimler `alinan/` klasörüne kaydedilir.
 
-Sadece `transfer.py`'yi diğer bilgisayara kopyalamak yeterlidir.
+Komut satırı için sadece `transfer.py` yeterlidir. Arayüz için `gui.py` ve `transfer.py` aynı klasörde olmalıdır
+(en kolayı depoyu `git clone` ile almaktır).
 
 ## Gereksinimler
 
 - Python **3.8 veya üstü** (`python3 --version` / Windows'ta `python --version`)
 - İki bilgisayar aynı ağda
+- Arayüz için `tkinter`: Windows'ta Python ile birlikte gelir. Kali/Debian'da eksikse:
+  `sudo apt install python3-tk`
 
-## Kullanım
+## Arayüz ile kullanım (önerilen)
+
+```bash
+git clone https://github.com/sabir-suleyman/img_transfer_with_socket.git
+cd img_transfer_with_socket
+python3 gui.py             # Windows: python gui.py   (veya: py gui.py)
+```
+
+Açılan küçük pencerede iki sekme vardır:
+
+- **Resim Al:** İsterseniz port ve zaman aşımını ayarlayıp **Dinlemeyi Başlat**'a basın. Bu bilgisayarın
+  IP adresi pencerede görünür; göndereni bu adrese yönlendirin. Gelen resimler `alinan/` klasörüne
+  kaydedilir (**Alınan klasörünü aç** düğmesiyle açılır). Bitince **Dinlemeyi Durdur**.
+- **Resim Gönder:** Alıcının IP adresini yazın, **Seç...** ile resmi seçin (varsayılan: klasördeki
+  `image.jpg`) ve **Gönder**'e basın. Sonuç bir pencereyle bildirilir.
+
+Pencerenin altındaki **Günlük** kutusu, komut satırı sürümünün yazdığı bilgi ve hata mesajlarının
+aynısını gösterir (yeşil: başarılı, kırmızı: hata). Alıcı da gönderen de aynı programı açar; roller
+sekmeyle seçilir, istendiği an değiştirilebilir.
+
+Komut satırı kullanmak isterseniz aşağıdaki bölümler hâlâ geçerlidir.
+
+## Kullanım (komut satırı)
 
 ### 1. Aynı ağa bağlanın
 Bir bilgisayardan telefonun hotspot'unu açın, iki bilgisayarı da ona bağlayın.
@@ -128,6 +154,7 @@ Neden böyle?
 |---|---|
 | `Bağlantı reddedildi` | Alıcı modu açık değil, port ya da IP yanlış. Karşı tarafta `1) Resim AL` seçili ve çalışıyor olmalı. |
 | `Zaman aşımı` | Cevap gelmiyor: çoğunlukla **güvenlik duvarı** ya da farklı ağlarda olmak. Aşağıya bakın. |
+| `tkinter bulunamadı` | Kali/Debian'da `sudo apt install python3-tk` ile kurun. Windows'ta Python'u kurarken "tcl/tk" seçeneği açık olmalı. |
 | `Geçersiz adres` | IP yanlış yazılmış. `192.168.43.25` biçiminde olmalı. |
 | `dinlenemiyor (port başka bir programda açık olabilir)` | Port meşgul (örn. alıcı modu başka bir pencerede açık). Kapatın ya da `al -p 6000` ve `gonder ... -p 6000` ile başka port kullanın. |
 | Alıcı `İstek reddedildi` yazıyor | Dosya türü/boyutu/adı geçersiz. Yukarıdaki sınırlara bakın. |
