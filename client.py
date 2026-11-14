@@ -4,27 +4,12 @@ import socket
 import struct
 import sys
 
-DEFAULT_PORT = 5001
-DEFAULT_TIMEOUT = 15      # Bağlanma ve her gönder/al işlemi için en fazla bekleme (sn)
+from protocol import (
+    ALLOWED_EXTENSIONS, DEFAULT_PORT, DEFAULT_TIMEOUT, MAX_FILE_SIZE,
+    MAX_NAME_BYTES, STATUS_OK, STATUS_REJECTED,
+)
+
 CHUNK_SIZE = 4096
-
-# Bu sınırlar server.py'deki ile aynı olmalı (sunucu yine de kendisi kontrol eder)
-MAX_FILE_SIZE = 50 * 1024 * 1024
-MAX_NAME_BYTES = 255
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
-
-# Sunucudan gelen 1 baytlık durum kodları (server.py ile aynı olmalı)
-STATUS_OK = 1          # Başlık kabul edildi / resim başarıyla kaydedildi
-STATUS_REJECTED = 2    # Başlık geçersiz - istek reddedildi
-STATUS_FAILED = 3      # Aktarım yarım kaldı ya da sunucuda hata oluştu
-
-
-def recv_status(sock):
-    """Sunucudan 1 baytlık durum kodu okur."""
-    data = sock.recv(1)
-    if not data:
-        raise ConnectionError("Sunucu cevap vermeden bağlantıyı kapattı.")
-    return data[0]
 
 
 def parse_args():
@@ -39,28 +24,42 @@ def parse_args():
     return parser.parse_args()
 
 
-args = parse_args()
+def check_file(path):
+    """Göndermeden önce dosyayı kontrol eder: (ad, ad_baytları, boyut) döndürür.
 
-if not os.path.isfile(args.dosya):
-    sys.exit(f"[!] Dosya bulunamadı: {args.dosya}")
+    Sunucunun reddedeceği bir şeyi hiç göndermeyelim diye sorun varsa çıkar.
+    """
+    if not os.path.isfile(path):
+        sys.exit(f"[!] Dosya bulunamadı: {path}")
 
-file_size = os.path.getsize(args.dosya)
-file_name = os.path.basename(args.dosya)          # Sadece ad (klasör yolu olmadan)
-name_bytes = file_name.encode("utf-8")
+    file_size = os.path.getsize(path)
+    file_name = os.path.basename(path)       # Sadece ad (klasör yolu olmadan)
+    name_bytes = file_name.encode("utf-8")
 
-# Göndermeden önce kontrol: sunucunun reddedeceği bir şeyi hiç göndermeyelim
-if os.path.splitext(file_name)[1].lower() not in ALLOWED_EXTENSIONS:
-    sys.exit(f"[!] Desteklenmeyen dosya türü. İzin verilenler: "
-             f"{', '.join(sorted(ALLOWED_EXTENSIONS))}")
-if file_size == 0:
-    sys.exit("[!] Dosya boş.")
-if file_size > MAX_FILE_SIZE:
-    sys.exit(f"[!] Dosya çok büyük ({file_size} bayt). "
-             f"En fazla {MAX_FILE_SIZE} bayt gönderilebilir.")
-if len(name_bytes) > MAX_NAME_BYTES:
-    sys.exit(f"[!] Dosya adı çok uzun (en fazla {MAX_NAME_BYTES} bayt).")
+    if os.path.splitext(file_name)[1].lower() not in ALLOWED_EXTENSIONS:
+        sys.exit(f"[!] Desteklenmeyen dosya türü. İzin verilenler: "
+                 f"{', '.join(sorted(ALLOWED_EXTENSIONS))}")
+    if file_size == 0:
+        sys.exit("[!] Dosya boş.")
+    if file_size > MAX_FILE_SIZE:
+        sys.exit(f"[!] Dosya çok büyük ({file_size} bayt). "
+                 f"En fazla {MAX_FILE_SIZE} bayt gönderilebilir.")
+    if len(name_bytes) > MAX_NAME_BYTES:
+        sys.exit(f"[!] Dosya adı çok uzun (en fazla {MAX_NAME_BYTES} bayt).")
 
-try:
+    return file_name, name_bytes, file_size
+
+
+def recv_status(sock):
+    """Sunucudan 1 baytlık durum kodu okur."""
+    data = sock.recv(1)
+    if not data:
+        raise ConnectionError("Sunucu cevap vermeden bağlantıyı kapattı.")
+    return data[0]
+
+
+def send_image(args, file_name, name_bytes, file_size):
+    """Resmi sunucuya gönderir. Sorun olursa hata mesajıyla çıkar."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
         # connect/send/recv hiçbiri args.timeout saniyeden uzun beklemesin
         client_socket.settimeout(args.timeout)
@@ -89,17 +88,27 @@ try:
         if status != STATUS_OK:
             sys.exit("[!] Sunucu resmi kaydedemedi, aktarım başarısız.")
 
-    print("[+] Resim aktarımı tamamlandı, sunucu onayladı.")
 
-except socket.timeout:
-    sys.exit(f"[!] Zaman aşımı: {args.timeout:g} saniye içinde cevap alınamadı. "
-             f"IP adresini, portu ve ağ bağlantısını kontrol edin.")
-except ConnectionRefusedError:
-    sys.exit(f"[!] Bağlantı reddedildi: {args.ip}:{args.port} adresinde "
-             f"sunucu çalışmıyor ya da port yanlış.")
-except socket.gaierror:
-    sys.exit(f"[!] Geçersiz adres: {args.ip}")
-except ConnectionError as e:
-    sys.exit(f"[!] Bağlantı koptu: {e}")
-except OSError as e:
-    sys.exit(f"[!] Ağ hatası: {e}")
+def main():
+    args = parse_args()
+    file_name, name_bytes, file_size = check_file(args.dosya)
+
+    try:
+        send_image(args, file_name, name_bytes, file_size)
+        print("[+] Resim aktarımı tamamlandı, sunucu onayladı.")
+    except socket.timeout:
+        sys.exit(f"[!] Zaman aşımı: {args.timeout:g} saniye içinde cevap alınamadı. "
+                 f"IP adresini, portu ve ağ bağlantısını kontrol edin.")
+    except ConnectionRefusedError:
+        sys.exit(f"[!] Bağlantı reddedildi: {args.ip}:{args.port} adresinde "
+                 f"sunucu çalışmıyor ya da port yanlış.")
+    except socket.gaierror:
+        sys.exit(f"[!] Geçersiz adres: {args.ip}")
+    except ConnectionError as e:
+        sys.exit(f"[!] Bağlantı koptu: {e}")
+    except OSError as e:
+        sys.exit(f"[!] Ağ hatası: {e}")
+
+
+if __name__ == "__main__":
+    main()
