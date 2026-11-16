@@ -11,7 +11,7 @@ Assignment for the course *Fundamental Protocols in Computer Networks*.
 | Sabir Süleymanlı    | 502531019  |
 | Mert Gökmen         | 502631009  |
 
-Sends an image from one computer to another using **TCP sockets**. No internet connection is needed;
+Sends an **image or a video** from one computer to another using **TCP sockets**. No internet connection is needed;
 both computers only have to be on the same local network (same Wi-Fi, phone hotspot, or an Ethernet cable).
 
 Works on Linux (Kali) and Windows 10/11. It uses only the Python standard library
@@ -58,7 +58,7 @@ A small window opens with two tabs:
   (Start Listening). This computer's IP address is shown in the window; give it to the sender. Incoming
   images are saved to the `alinan/` folder (the **Alınan klasörünü aç** / "Open received folder" button opens it).
   When you are done, press **Dinlemeyi Durdur** (Stop Listening).
-- **Resim Gönder** (Send Image): Enter the receiver's IP address, choose the image with **Seç...**
+- **Resim Gönder** (Send Image): Enter the receiver's IP address, choose the image or video with **Seç...**
   (Browse...) (default: `image.jpg` in the folder) and press **Gönder** (Send). The result is reported in a dialog.
 
 The **Günlük** (Log) box at the bottom of the window shows the same information and error messages that the
@@ -119,7 +119,11 @@ python3 transfer.py gonder 192.168.43.25 image.jpg -p 6000
 
 The menu always uses the default port (`5001`).
 
-Accepted file types: `.jpg .jpeg .png .gif .bmp .webp` - at most 50 MB.
+Accepted file types (at most 2 GB):
+- Image: `.jpg .jpeg .png .gif .bmp .webp`
+- Video: `.mp4 .mkv .avi .mov .webm .wmv .flv .m4v .mpeg .mpg .3gp`
+
+Files are sent and received in chunks, so large videos are not held in memory.
 
 ### Using the separate server / client files
 If you want to run the roles as two separate files (they must be in the same folder as `protocol.py`):

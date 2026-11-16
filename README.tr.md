@@ -11,7 +11,7 @@ Bilgisayar Ağlarında Temel Protokoller dersi ödevi.
 | Sabir Süleymanlı    | 502531019  |
 | Mert Gökmen         | 502631009  |
 
-İki bilgisayar arasında **TCP soketleri** kullanarak resim gönderir. İnternet gerekmez; iki bilgisayarın
+İki bilgisayar arasında **TCP soketleri** kullanarak **resim ve video** gönderir. İnternet gerekmez; iki bilgisayarın
 aynı yerel ağda olması yeterlidir (aynı Wi-Fi, telefon hotspot'u veya Ethernet kablosu).
 
 Linux (Kali) ve Windows 10/11 üzerinde çalışır. Sadece Python standart kütüphanesini kullanır
@@ -53,7 +53,7 @@ Açılan küçük pencerede iki sekme vardır:
 - **Resim Al:** İsterseniz port ve zaman aşımını ayarlayıp **Dinlemeyi Başlat**'a basın. Bu bilgisayarın
   IP adresi pencerede görünür; göndereni bu adrese yönlendirin. Gelen resimler `alinan/` klasörüne
   kaydedilir (**Alınan klasörünü aç** düğmesiyle açılır). Bitince **Dinlemeyi Durdur**.
-- **Resim Gönder:** Alıcının IP adresini yazın, **Seç...** ile resmi seçin (varsayılan: klasördeki
+- **Resim Gönder:** Alıcının IP adresini yazın, **Seç...** ile resmi ya da videoyu seçin (varsayılan: klasördeki
   `image.jpg`) ve **Gönder**'e basın. Sonuç bir pencereyle bildirilir.
 
 Pencerenin altındaki **Günlük** kutusu, komut satırı sürümünün yazdığı bilgi ve hata mesajlarının
@@ -110,7 +110,11 @@ python3 transfer.py gonder 192.168.43.25 image.jpg -p 6000
 
 Menü her zaman varsayılan portu (`5001`) kullanır.
 
-Kabul edilen dosya türleri: `.jpg .jpeg .png .gif .bmp .webp` - en fazla 50 MB.
+Kabul edilen dosya türleri (en fazla 2 GB):
+- Resim: `.jpg .jpeg .png .gif .bmp .webp`
+- Video: `.mp4 .mkv .avi .mov .webm .wmv .flv .m4v .mpeg .mpg .3gp`
+
+Dosyalar parça parça gönderilip alındığı için büyük videolar bellekte tutulmaz.
 
 ### Ayrı sunucu / istemci dosyalarıyla kullanım
 Rolleri iki ayrı dosya olarak çalıştırmak isterseniz (`protocol.py` ile aynı klasörde olmaları gerekir):

@@ -33,7 +33,9 @@ sys.path.insert(0, BASE_DIR)
 import transfer as tr  # noqa: E402  (chdir'den sonra içe aktarılmalı)
 
 IMAGE_TYPES = [
+    ("Resim ve videolar", "*.jpg *.jpeg *.png *.gif *.bmp *.webp *.mp4 *.mkv *.avi *.mov *.webm *.wmv *.flv *.m4v *.mpeg *.mpg *.3gp"),
     ("Resimler", "*.jpg *.jpeg *.png *.gif *.bmp *.webp"),
+    ("Videolar", "*.mp4 *.mkv *.avi *.mov *.webm *.wmv *.flv *.m4v *.mpeg *.mpg *.3gp"),
     ("Tüm dosyalar", "*.*"),
 ]
 
@@ -112,7 +114,7 @@ class App:
         self.s_bar.grid(row=4, column=0, columnspan=3, sticky="ew")
 
     def choose_file(self):
-        path = filedialog.askopenfilename(title="Gönderilecek resmi seç", filetypes=IMAGE_TYPES)
+        path = filedialog.askopenfilename(title="Gönderilecek resmi/videoyu seç", filetypes=IMAGE_TYPES)
         if path:
             self.s_path.set(path)
 

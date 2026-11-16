@@ -11,9 +11,14 @@ Protokol (TCP üzerinde, tüm sayılar big-endian / ağ bayt sırası):
 DEFAULT_PORT = 5001
 DEFAULT_TIMEOUT = 15                     # Saniye
 
-MAX_FILE_SIZE = 50 * 1024 * 1024         # 50 MB üst sınır
+MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024   # 2 GB üst sınır (video için)
 MAX_NAME_BYTES = 255                     # Dosya adı en fazla 255 bayt (UTF-8)
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
+ALLOWED_EXTENSIONS = {
+    # resim
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
+    # video
+    ".mp4", ".mkv", ".avi", ".mov", ".webm", ".wmv", ".flv", ".m4v", ".mpeg", ".mpg", ".3gp",
+}
 
 # Sunucunun istemciye gönderdiği 1 baytlık durum kodları
 STATUS_OK = 1          # Başlık kabul edildi / resim başarıyla kaydedildi
